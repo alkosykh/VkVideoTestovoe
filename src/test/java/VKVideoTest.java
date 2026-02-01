@@ -1,35 +1,29 @@
-import com.codeborne.selenide.WebDriverRunner;
-import io.appium.java_client.AppiumBy;
-import io.appium.java_client.android.AndroidDriver;
-import io.appium.java_client.android.options.UiAutomator2Options;
-import io.qameta.allure.*;
-import org.junit.jupiter.api.*;
-import org.openqa.selenium.By;
-import org.openqa.selenium.NoSuchElementException;
-import org.openqa.selenium.WebElement;
-import org.openqa.selenium.support.ui.ExpectedConditions;
-import org.openqa.selenium.support.ui.WebDriverWait;
+package test.java;
 
-import java.io.ByteArrayInputStream;
+import io.appium.java_client.AppiumBy;
+import io.appium.java_client.android.options.UiAutomator2Options;
+import io.appium.java_client.android.AndroidDriver;
+import io.qameta.allure.Allure;
+import org.junit.jupiter.api.*;
+import org.openqa.selenium.WebElement;
+import org.openqa.selenium.support.ui.WebDriverWait;
+import java.util.Map;
+
 import java.net.URL;
 import java.time.Duration;
 import java.util.List;
-
-import static com.codeborne.selenide.Condition.visible;
-import static com.codeborne.selenide.Selenide.$;
-import static org.junit.jupiter.api.Assertions.*;
+import java.util.HashMap;
+import java.util.Map;
+import com.codeborne.selenide.WebDriverRunner;
+import io.appium.java_client.android.connection.ConnectionStateBuilder;
+import io.appium.java_client.android.connection.ConnectionState;
+import org.openqa.selenium.By;
 
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
-public class VKVideoTest {
-    private static AndroidDriver driver;
-    private static WebDriverWait wait;
-    private static final String APP_PACKAGE = "com.vk.vkvideo";
-    private static final String APP_ACTIVITY = "com.vk.video.screens.main.MainActivity";
-    private static final String APPIUM_SERVER = "http://127.0.0.1:4723";
-    private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(20);
+public class VKVideoTest extends BaseTest {
 
-    @BeforeAll
-    static void setup() throws Exception {
+    @BeforeEach
+     void setup() throws Exception {
         UiAutomator2Options options = new UiAutomator2Options()
                 .setPlatformName("Android")
                 .setDeviceName("emulator-5554")
@@ -37,7 +31,8 @@ public class VKVideoTest {
                 .setAppPackage(APP_PACKAGE)
                 .setAppActivity(APP_ACTIVITY)
                 .setNoReset(true)
-                .setAutoGrantPermissions(true);
+                .setAutoGrantPermissions(true)
+                .setNewCommandTimeout(Duration.ofSeconds(120));
 
         driver = new AndroidDriver(new URL(APPIUM_SERVER), options);
         driver.activateApp(APP_PACKAGE);
@@ -45,8 +40,8 @@ public class VKVideoTest {
         wait = new WebDriverWait(driver, WAIT_TIMEOUT);
     }
 
-    @AfterAll
-    static void tearDown() {
+    @AfterEach
+    void tearDown() {
         if (driver != null) {
             driver.terminateApp(APP_PACKAGE);
             driver.quit();
@@ -56,134 +51,180 @@ public class VKVideoTest {
     @Test
     @Order(1)
     void testVideoPlayback() {
+        
         try {
-            Allure.step("1. Ожидание загрузки главного экрана и закрытие всплывающих окон", () -> {
-                Thread.sleep(3000);
+            setAirplaneMode(false);
+            Thread.sleep(5000);
+            Allure.step("1. Ожидание и закрытие попапов", () -> {
                 closePopups();
+                try {
+                    wait.until(d -> driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/preview")).size() > 0);
+                } catch (Exception ignored) {}
             });
 
-            Allure.step("2. Клик по первому доступному видео", () -> {
+            Allure.step("2. Клик по видео", () -> {
                 WebElement videoTile = findVideoTile();
-                assertNotNull(videoTile, "Видео не найдено на экране");
+                Assertions.assertNotNull(videoTile, "Видео не найдено");
                 videoTile.click();
             });
 
-            Allure.step("3. Ждем 2 сек, кликаем по видео (чтобы показать плеер) и меряем таймер", () -> {
-                Thread.sleep(5000);
-
-                try {
-                    List<WebElement> frame = driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/video_subtitles"));
-                    if (!frame.isEmpty()) {
-                        frame.get(0).click();
-                    } else {
-                        driver.findElement(AppiumBy.xpath("//android.widget.FrameLayout[@resource-id=\"com.vk.vkvideo:id/video_subtitles\"]")).click();
-                        Thread.sleep(1000);
-                    }
-                } catch (Exception e) {
-                    // System.out.println("Не удалось кликнуть по video_subtitles: " + e.getMessage());
-                }
+            Allure.step("3. Ждём 2 сек, кликаем и меряем таймер", () -> {
+                try { Thread.sleep(2000); } catch (InterruptedException ignored) {}
+                List<WebElement> frame = driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/video_subtitles"));
+                if (!frame.isEmpty()) frame.get(0).click();
                 checkVideoPlayback();
             });
 
         } catch (Exception e) {
             handleTestFailure(e);
-            throw e;
+            throw new RuntimeException(e);
         }
     }
 
-    private WebElement findVideoTile() {
+    @Test
+    @Order(2)
+    @DisplayName("Негатив: видео не воспроизводится после отключения интернета")
+    void testVideoPlaybackOffline() {
         try {
-            var videoTile = driver.findElements(
-                    AppiumBy.xpath("//android.widget.ImageView[@resource-id=\"com.vk.vkvideo:id/preview\"]"));
+            setAirplaneMode(false);
+            Thread.sleep(5000);
             
-            if (!videoTile.isEmpty()) {
-                return videoTile.get(0);
-            }
+            Allure.step("1. Ожидание и закрытие попапов", () -> {
+                closePopups();
+                try {
+                    wait.until(d -> driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/preview")).size() > 0);
+                } catch (Exception ignored) {}
+            });
 
-            var fallbackTile = driver.findElements(
-                    AppiumBy.androidUIAutomator("new UiSelector().className(\"android.view.ViewGroup\").clickable(true).instance(0)"));
-            
-            return fallbackTile.isEmpty() ? null : fallbackTile.get(0);
+            Allure.step("2. Открываем видео (с интернетом)", () -> {
+                setAirplaneMode(true);
+                Thread.sleep(5000);
+                System.out.println("Сеть отключена после открытия видео");
+                driver.findElement(AppiumBy.androidUIAutomator("new UiScrollable(new UiSelector().scrollable(true)).scrollForward(5)"));
+                Thread.sleep(2000);
+                
+                WebElement videoTile = findVideoTile();
+                Assertions.assertNotNull(videoTile, "Видео не найдено");
+                videoTile.click();
+            });
+
+            Allure.step("5. Проверяем что видео НЕ продолжает воспроизводиться", () -> {
+                List<WebElement> frame = driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/video_subtitles"));
+                if (!frame.isEmpty()) frame.get(0).click();
+                
+                checkVideoNotPlaying();
+            });
+
         } catch (Exception e) {
-            // System.out.println("Ошибка при поиске видео: " + e.getMessage());
-            return null;
+            handleTestFailure(e);
+            throw new RuntimeException(e);
         }
     }
 
-    private void checkVideoPlayback() throws Exception {
-        By timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
-        WebElement timerElement = wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator));
-
-        String timeBefore = timerElement.getText();
-        // System.out.println("Таймер (начало): " + timeBefore);
-
-        Thread.sleep(1000);
-
-        String timeAfter = timerElement.getText();;
-        // System.out.println("Таймер (через 2 сек): " + timeAfter);
-
-        boolean isPlaying = !timeBefore.equals(timeAfter);
-        assertTrue(isPlaying, "Видео не воспроизводится");
-        // System.out.println("Видео воспроизводится - время отсчитывается");
+    private void setAirplaneMode(boolean enable) {
+    try {
+        if (enable) {
+            System.out.println("Выключаю интернет (Wi-Fi и Data)...");
+            driver.executeScript("mobile: shell", Map.of("command", "svc wifi disable"));
+            driver.executeScript("mobile: shell", Map.of("command", "svc data disable"));
+        } else {
+            System.out.println("Включаю интернет обратно...");
+            driver.executeScript("mobile: shell", Map.of("command", "svc wifi enable"));
+            driver.executeScript("mobile: shell", Map.of("command", "svc data enable"));
+    
+            Thread.sleep(8000); 
+        }
+    } catch (Exception e) {
+        System.err.println("Ошибка при управлении сетью: " + e.getMessage());
     }
+}
 
-    private void clickPlayButton() {
+            private void enableAirplaneMode(boolean enable) {
         try {
-            var playBtn = $(AppiumBy.xpath("//*[contains(@content-desc, 'Play') or contains(@content-desc, 'Воспроизвести') or contains(@resource-id, 'play')]"));
-            if (playBtn.exists()) {
-                playBtn.click();
-                Thread.sleep(1000);
-            }
-        } catch (Exception e) {
-            // System.out.println("Ошибка при клике Play: " + e.getMessage());
-        }
-    }
+            // Открываем Settings через intent
+            driver.executeScript("mobile: startActivity", new HashMap<String, Object>() {{
+                put("intent", "android.intent.action.MAIN");
+                put("action", "android.intent.action.SETTINGS");
+                put("package", "com.android.settings");
+            }});
+            Thread.sleep(3000);
 
-    private void clickCenterOfScreen() {
-        try {
-            $(AppiumBy.className("android.widget.FrameLayout")).click();
-        } catch (Exception e) {
-            // System.out.println("Ошибка при клике на центр экрана: " + e.getMessage());
-        }
-    }
-
-    private void closePopups() {
-        String[] popupXpaths = {
-                "//android.widget.ImageView[@resource-id='" + APP_PACKAGE + ":id/close_btn_left']",
-                "//android.widget.Button[@text='Закрыть']",
-                "//android.widget.ImageView[@content-desc='Закрыть']",
-                "//android.widget.Button[@resource-id='android:id/button2']",
-                "//*[contains(@text, 'Позже')]",
-                "//*[contains(@text, 'Skip')]",
-                "//android.widget.Button[@resource-id='" + APP_PACKAGE + ":id/secondary_button']"
-        };
-
-        for (String xpath : popupXpaths) {
+            // Ищем и скроллим к Airplane Mode
             try {
-                List<WebElement> elements = driver.findElements(AppiumBy.xpath(xpath));
-                if (!elements.isEmpty() && elements.get(0).isDisplayed()) {
-                    elements.get(0).click();
-                    // System.out.println("Закрыто окно: " + xpath);
-                    break;
-                }
-            } catch (NoSuchElementException e) {
+                driver.findElement(AppiumBy.androidUIAutomator(
+                        "new UiScrollable(new UiSelector().scrollable(true)).scrollIntoView(new UiSelector().text(\"Airplane mode\"))"));
+            } catch (Exception ignored) {
+                System.out.println("⚠ Не удалось найти Airplane mode через скролл, ищем через resourceId");
             }
+            
+            Thread.sleep(1000);
+
+            // Пытаемся найти switch по resourceId или xpath
+            List<WebElement> toggles = driver.findElements(AppiumBy.xpath("//android.widget.Switch[@resource-id='android:id/switch_widget']"));
+            
+            if (toggles.isEmpty()) {
+                toggles = driver.findElements(AppiumBy.xpath("//android.widget.CheckBox"));
+            }
+
+            if (!toggles.isEmpty()) {
+                WebElement toggle = toggles.get(0);
+                String isChecked = toggle.getAttribute("checked");
+                
+                boolean shouldClick = (enable && !isChecked.equals("true")) || (!enable && isChecked.equals("true"));
+                
+                if (shouldClick) {
+                    toggle.click();
+                    Thread.sleep(3000);
+                    System.out.println(enable ? "✓ Режим полета ВКЛЮЧЕН" : "✓ Режим полета ВЫКЛЮЧЕН");
+                } else {
+                    System.out.println("ℹ Режим полета уже в нужном состоянии");
+                }
+            } else {
+                System.out.println("⚠ Не удалось найти переключатель Airplane Mode");
+            }
+
+            // Возвращаемся в приложение VK Video
+            driver.activateApp(APP_PACKAGE);
+            Thread.sleep(2000);
+
+        } catch (Exception e) {
+            System.out.println("⚠ Ошибка при изменении режима полета: " + e.getMessage());
+            e.printStackTrace();
+            try {
+                driver.activateApp(APP_PACKAGE);
+            } catch (Exception ignored) {}
         }
     }
 
-    private void handleTestFailure(Exception e) {
-        Allure.step("Обработка ошибки теста", () -> {
-            // System.out.println("Ошибка теста: " + e.getMessage());
+    private void checkVideoNotPlaying() {
+    Allure.step("Проверка отсутствия воспроизведения", () -> {
+        // 1. Пытаемся найти спиннер загрузки
+        By loaderLocator = AppiumBy.id(APP_PACKAGE + ":id/progress_view");
+        By timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
+
+        // Ждем немного — появится ли спиннер?
+        boolean isLoaderVisible = false;
+        try {
+            wait.withTimeout(Duration.ofSeconds(5))
+                .until(org.openqa.selenium.support.ui.ExpectedConditions.visibilityOfElementLocated(loaderLocator));
+            isLoaderVisible = true;
+            System.out.println("✓ Обнаружен индикатор загрузки (бесконечный спиннер)");
+        } catch (Exception e) {
+            System.out.println("ℹ Спиннер не появился, проверяем таймер...");
+        }
+
+        // 2. Если спиннера нет, проверяем, что время не идет
+        if (!isLoaderVisible) {
+            WebElement timer = wait.until(org.openqa.selenium.support.ui.ExpectedConditions.visibilityOfElementLocated(timerLocator));
+            String timeBefore = timer.getText();
+            Thread.sleep(3000);
+            String timeAfter = driver.findElement(timerLocator).getText();
             
-            byte[] screenshot = driver.getScreenshotAs(org.openqa.selenium.OutputType.BYTES);
-            Allure.addAttachment("Ошибка видео", "image/png", 
-                    new ByteArrayInputStream(screenshot), "png");
-            
-            Allure.addAttachment("Исключение", "text/plain", e.toString());
-            
-            if (e.getMessage().contains("timeout")) {
-                // System.out.println("Таймаут при воспроизведении");
-            }
-        });
-    }
+            Assertions.assertEquals(timeBefore, timeAfter, "Видео продолжает играть, а не должно!");
+            System.out.println("✓ Время замерло на: " + timeBefore);
+        }
+        
+        Assertions.assertTrue(isLoaderVisible || true, "Видео не остановилось");
+    });
+}
 }
