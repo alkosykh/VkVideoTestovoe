@@ -46,8 +46,6 @@ public class BaseTest {
         }
     }
 
-     
-
     void closePopups() {
         String[] popupXpaths = {
                 "//android.widget.ImageView[@resource-id='" + APP_PACKAGE + ":id/close_btn_left']",
@@ -99,66 +97,25 @@ public class BaseTest {
         }
     }
 
-    // void checkVideoPlayback() throws Exception {
-    //     var timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
-    //     WebElement timerElement = wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator));
-    //     Thread.sleep(1000);
-    //     String timeBefore = timerElement.getText();
-    //     Thread.sleep(1000);
-    //     String timeAfter = driver.findElement(timerLocator).getText();
+    void checkVideoPlayback() throws Exception {
+        
+        By timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
+        WebElement timerElement = driver.findElement(timerLocator);
+        String timeBefore = timerElement.getText();
 
-    //     boolean isPlaying = !timeBefore.equals(timeAfter);
-    //     if (!isPlaying) throw new AssertionError("Видео не воспроизводится");
-    // }
+        Thread.sleep(4000);
 
-//     private void tapAtCenter() {
-//     int x = driver.manage().window().getSize().width / 2;
-//     int y = driver.manage().window().getSize().height / 2;
-    
-//     PointerInput finger = new PointerInput(PointerInput.Kind.TOUCH, "finger");
-//     Sequence tap = new Sequence(finger, 1);
-//     tap.addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), x, y));
-//     tap.addAction(finger.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
-//     tap.addAction(finger.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
-//     driver.perform(Collections.singletonList(tap));
-// }
-
-void checkVideoPlayback() throws Exception {
-    By timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
-
-    // 1. Убеждаемся, что таймер виден. Если нет — вызываем его тапом.
-    // try {
-    //     wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator));
-    // } catch (Exception e) {
-    //     System.out.println("Таймер скрыт, вызываю интерфейс...");
-    //     tapAtCenter();
-    // }
-
-    // 2. Берем первый замер
-    WebElement timerElement = driver.findElement(timerLocator);
-    String timeBefore = timerElement.getText();
-    System.out.println("Время до: " + timeBefore);
-
-    // 3. Ждем 3-4 секунды, чтобы изменение было гарантированным
-    Thread.sleep(4000);
-
-    // 4. Проверяем, не скрылся ли интерфейс за это время
-    String timeAfter;
-    try {
-        timeAfter = driver.findElement(timerLocator).getText();
-    } catch (Exception e) {
-        System.out.println("Интерфейс скрылся во время ожидания, вызываю повторно...");
-        List<WebElement> frame = driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/video_subtitles"));
-                if (!frame.isEmpty()) frame.get(0).click();
-        // tapAtCenter();
-        timeAfter = wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator)).getText();
+        String timeAfter;
+        try {
+            timeAfter = driver.findElement(timerLocator).getText();
+        } catch (Exception e) {
+            List<WebElement> frame = driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/video_subtitles"));
+                    if (!frame.isEmpty()) frame.get(0).click();
+            timeAfter = wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator)).getText();
+        }
+        
+        Assertions.assertNotEquals(timeBefore, timeAfter, "Видео зависло! Время не изменилось: " + timeBefore);
     }
-    
-    System.out.println("Время после: " + timeAfter);
-
-    // 5. Проверка
-    Assertions.assertNotEquals(timeBefore, timeAfter, "Видео зависло! Время не изменилось: " + timeBefore);
-}
 
     void checkVideoNotPlaying() {
         Allure.step("Проверка отсутствия воспроизведения", () -> {
@@ -183,7 +140,6 @@ void checkVideoPlayback() throws Exception {
             
             Assertions.assertEquals(timeBefore, timeAfter, "Видео продолжает играть, а не должно!");
         }
-        
         Assertions.assertTrue(isLoaderVisible || true, "Видео не остановилось");
         });
     }

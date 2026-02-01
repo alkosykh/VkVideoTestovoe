@@ -106,7 +106,7 @@ public class VKVideoTest extends BaseTest {
                 videoTile.click();
             });
 
-            Allure.step("Проверяем что видео не продолжает воспроизводиться", () -> {
+            Allure.step("Проверяем что видео не  воспроизводится", () -> {
                 List<WebElement> frame = driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/video_subtitles"));
                 if (!frame.isEmpty()) frame.get(0).click();
                 
@@ -118,6 +118,4 @@ public class VKVideoTest extends BaseTest {
             throw new RuntimeException(e);
         }
     }
-
-
 }
