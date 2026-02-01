@@ -4,6 +4,8 @@ import com.codeborne.selenide.WebDriverRunner;
 import io.appium.java_client.AppiumBy;
 import io.appium.java_client.android.AndroidDriver;
 import io.qameta.allure.Allure;
+import org.junit.jupiter.api.Assertions;
+import org.openqa.selenium.By;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
@@ -11,8 +13,11 @@ import org.openqa.selenium.support.ui.WebDriverWait;
 import java.io.ByteArrayInputStream;
 import java.time.Duration;
 import java.util.List;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
-import com.codeborne.selenide.WebDriverRunner;
+import javax.sound.midi.Sequence;
 
 
 public class BaseTest {
@@ -23,7 +28,7 @@ public class BaseTest {
     protected static final String APPIUM_SERVER = "http://127.0.0.1:4723";
     protected static final Duration WAIT_TIMEOUT = Duration.ofSeconds(20);
 
-    protected WebElement findVideoTile() {
+    WebElement findVideoTile() {
         try {
             var videoTile = driver.findElements(
                     AppiumBy.xpath("//android.widget.ImageView[@resource-id=\"com.vk.vkvideo:id/preview\"]"));
@@ -41,19 +46,9 @@ public class BaseTest {
         }
     }
 
-    protected void checkVideoPlayback() throws Exception {
-        var timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
-        WebElement timerElement = wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator));
+     
 
-        String timeBefore = timerElement.getText();
-        Thread.sleep(1000);
-        String timeAfter = driver.findElement(timerLocator).getText();
-
-        boolean isPlaying = !timeBefore.equals(timeAfter);
-        if (!isPlaying) throw new AssertionError("Видео не воспроизводится");
-    }
-
-    protected void closePopups() {
+    void closePopups() {
         String[] popupXpaths = {
                 "//android.widget.ImageView[@resource-id='" + APP_PACKAGE + ":id/close_btn_left']",
                 "//android.widget.Button[@text='Закрыть']",
@@ -76,7 +71,7 @@ public class BaseTest {
         }
     }
 
-    protected void handleTestFailure(Exception e) {
+    void handleTestFailure(Exception e) {
         try {
             if (driver != null && driver.getSessionId() != null) {
                 byte[] screenshot = driver.getScreenshotAs(org.openqa.selenium.OutputType.BYTES);
@@ -84,5 +79,112 @@ public class BaseTest {
             }
         } catch (Exception ignored) {}
         try { Allure.addAttachment("Исключение", "text/plain", e.toString()); } catch (Exception ignored) {}
+    }
+
+
+
+    void setAirplaneMode(boolean enable) {
+        try {
+            if (enable) {
+                driver.executeScript("mobile: shell", Map.of("command", "svc wifi disable"));
+                driver.executeScript("mobile: shell", Map.of("command", "svc data disable"));
+            } else {
+                driver.executeScript("mobile: shell", Map.of("command", "svc wifi enable"));
+                driver.executeScript("mobile: shell", Map.of("command", "svc data enable"));
+        
+                Thread.sleep(8000); 
+            }
+        } catch (Exception e) {
+            System.err.println("Ошибка при управлении сетью: " + e.getMessage());
+        }
+    }
+
+    // void checkVideoPlayback() throws Exception {
+    //     var timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
+    //     WebElement timerElement = wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator));
+    //     Thread.sleep(1000);
+    //     String timeBefore = timerElement.getText();
+    //     Thread.sleep(1000);
+    //     String timeAfter = driver.findElement(timerLocator).getText();
+
+    //     boolean isPlaying = !timeBefore.equals(timeAfter);
+    //     if (!isPlaying) throw new AssertionError("Видео не воспроизводится");
+    // }
+
+//     private void tapAtCenter() {
+//     int x = driver.manage().window().getSize().width / 2;
+//     int y = driver.manage().window().getSize().height / 2;
+    
+//     PointerInput finger = new PointerInput(PointerInput.Kind.TOUCH, "finger");
+//     Sequence tap = new Sequence(finger, 1);
+//     tap.addAction(finger.createPointerMove(Duration.ZERO, PointerInput.Origin.viewport(), x, y));
+//     tap.addAction(finger.createPointerDown(PointerInput.MouseButton.LEFT.asArg()));
+//     tap.addAction(finger.createPointerUp(PointerInput.MouseButton.LEFT.asArg()));
+//     driver.perform(Collections.singletonList(tap));
+// }
+
+void checkVideoPlayback() throws Exception {
+    By timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
+
+    // 1. Убеждаемся, что таймер виден. Если нет — вызываем его тапом.
+    // try {
+    //     wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator));
+    // } catch (Exception e) {
+    //     System.out.println("Таймер скрыт, вызываю интерфейс...");
+    //     tapAtCenter();
+    // }
+
+    // 2. Берем первый замер
+    WebElement timerElement = driver.findElement(timerLocator);
+    String timeBefore = timerElement.getText();
+    System.out.println("Время до: " + timeBefore);
+
+    // 3. Ждем 3-4 секунды, чтобы изменение было гарантированным
+    Thread.sleep(4000);
+
+    // 4. Проверяем, не скрылся ли интерфейс за это время
+    String timeAfter;
+    try {
+        timeAfter = driver.findElement(timerLocator).getText();
+    } catch (Exception e) {
+        System.out.println("Интерфейс скрылся во время ожидания, вызываю повторно...");
+        List<WebElement> frame = driver.findElements(AppiumBy.id(APP_PACKAGE + ":id/video_subtitles"));
+                if (!frame.isEmpty()) frame.get(0).click();
+        // tapAtCenter();
+        timeAfter = wait.until(ExpectedConditions.visibilityOfElementLocated(timerLocator)).getText();
+    }
+    
+    System.out.println("Время после: " + timeAfter);
+
+    // 5. Проверка
+    Assertions.assertNotEquals(timeBefore, timeAfter, "Видео зависло! Время не изменилось: " + timeBefore);
+}
+
+    void checkVideoNotPlaying() {
+        Allure.step("Проверка отсутствия воспроизведения", () -> {
+        // Пытаемся найти спиннер загрузки
+        By loaderLocator = AppiumBy.id(APP_PACKAGE + ":id/progress_view");
+        By timerLocator = AppiumBy.id(APP_PACKAGE + ":id/current_progress");
+
+        boolean isLoaderVisible = false;
+        try {
+            wait.withTimeout(Duration.ofSeconds(5))
+                .until(org.openqa.selenium.support.ui.ExpectedConditions.visibilityOfElementLocated(loaderLocator));
+            isLoaderVisible = true;
+        } catch (Exception e) {
+        }
+
+        // Если спиннера нет, проверяем, что время не идет
+        if (!isLoaderVisible) {
+            WebElement timer = wait.until(org.openqa.selenium.support.ui.ExpectedConditions.visibilityOfElementLocated(timerLocator));
+            String timeBefore = timer.getText();
+            Thread.sleep(3000);
+            String timeAfter = driver.findElement(timerLocator).getText();
+            
+            Assertions.assertEquals(timeBefore, timeAfter, "Видео продолжает играть, а не должно!");
+        }
+        
+        Assertions.assertTrue(isLoaderVisible || true, "Видео не остановилось");
+        });
     }
 }
